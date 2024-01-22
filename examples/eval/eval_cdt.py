@@ -3,6 +3,7 @@ from typing import Any, DefaultDict, Dict, List, Optional, Tuple
 
 import dsrl
 import numpy as np
+import os
 import pyrallis
 import torch
 from dsrl.offline_env import OfflineEnvWrapper, wrap_env  # noqa
@@ -14,11 +15,13 @@ from osrl.common.exp_util import load_config_and_model, seed_all
 
 @dataclass
 class EvalConfig:
-    path: str = "log/.../checkpoint/model.pt"
+    # path: str = "log/.../checkpoint/model.pt"
+    task: str = 'none'
+    exp: str = 'tmp'
     returns: List[float] = field(default=[300, 400, 500], is_mutable=True)
     costs: List[float] = field(default=[10, 10, 10], is_mutable=True)
     noise_scale: List[float] = None
-    eval_episodes: int = 20
+    eval_episodes: int = 5
     best: bool = False
     device: str = "cpu"
     threads: int = 4
@@ -27,15 +30,16 @@ class EvalConfig:
 @pyrallis.wrap()
 def eval(args: EvalConfig):
 
-    cfg, model = load_config_and_model(args.path, args.best)
+    load_path = os.getcwd()+f'/save/{args.task}/{args.exp}'
+    cfg, _ = load_config_and_model(load_path, args.best)
     seed_all(cfg["seed"])
     if args.device == "cpu":
         torch.set_num_threads(args.threads)
 
-    if "Metadrive" in cfg["task"]:
-        import gym
-    else:
-        import gymnasium as gym  # noqa
+    #if "Metadrive" in cfg["task"]:
+    #    import gym
+    # else:
+    import gymnasium as gym  # noqa
 
     env = wrap_env(
         env=gym.make(cfg["task"]),
@@ -72,7 +76,9 @@ def eval(args: EvalConfig):
         init_temperature=cfg["init_temperature"],
         target_entropy=target_entropy,
     )
-    cdt_model.load_state_dict(model["model_state"])
+    # cdt_model.load_state_dict(model["model_state"])
+    cdt_model.load_state_dict(torch.load(load_path+f'/model.pt'))
+    cdt_model.eval()
     cdt_model.to(args.device)
 
     trainer = CDTTrainer(cdt_model,
@@ -91,10 +97,17 @@ def eval(args: EvalConfig):
         seed_all(cfg["seed"])
         ret, cost, length = trainer.evaluate(args.eval_episodes,
                                              target_ret * cfg["reward_scale"],
-                                             target_cost * cfg["cost_scale"])
+                                             target_cost * cfg["cost_scale"],
+                                             prom=False)
+        ret_prom, cost_prom, length_prom = trainer.evaluate(args.eval_episodes,
+                                             target_ret * cfg["reward_scale"],
+                                             target_cost * cfg["cost_scale"],
+                                             prom=True)
         normalized_ret, normalized_cost = env.get_normalized_score(ret, cost)
+        normalized_ret_prom, normalized_cost_prom = env.get_normalized_score(ret_prom, cost_prom)
         print(
-            f"Target reward {target_ret}, real reward {ret}, normalized reward: {normalized_ret}; target cost {target_cost}, real cost {cost}, normalized cost: {normalized_cost}"
+            f"Target reward {target_ret}, real reward {ret}, normalized reward: {normalized_ret}; target cost {target_cost}, real cost {cost}, normalized cost: {normalized_cost}\n" 
+            f"real reward prom {ret_prom}, normlalized_reward porm {normalized_ret_prom}, real cost prom {cost_prom}, normalized cost prom {normalized_cost_prom}"
         )
 
 

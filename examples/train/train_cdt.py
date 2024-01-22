@@ -38,7 +38,8 @@ def train(args: CDTTrainConfig):
     if args.group is None:
         args.group = args.task + "-cost-" + str(int(args.cost_limit))
     if args.logdir is not None:
-        args.logdir = os.path.join(args.logdir, args.group, args.name)
+        # args.logdir = os.path.join(args.logdir, args.group, args.name)
+        args.logdir = os.getcwd()+f'/save/{args.task}/{args.exp}'
     logger = WandbLogger(cfg, args.project, args.group, args.name, args.logdir)
     # logger = TensorboardLogger(args.logdir, log_txt=True, name=args.name)
     logger.save_config(cfg, verbose=args.verbose)
@@ -49,8 +50,8 @@ def train(args: CDTTrainConfig):
         torch.set_num_threads(args.threads)
 
     # initialize environment
-    if "Metadrive" in args.task:
-        import gym
+    # if "Metadrive" in args.task:
+    #     import gym
     env = gym.make(args.task)
 
     # pre-process offline dataset
@@ -196,11 +197,11 @@ def train(args: CDTTrainConfig):
                     # critical step, rescale the return!
                     ret, cost, length = trainer.evaluate(
                         args.eval_episodes, reward_return * args.reward_scale,
-                        (args.episode_len - cost_return) * args.cost_scale)
+                        (args.episode_len - cost_return) * args.cost_scale, prom=False)
                 else:
                     ret, cost, length = trainer.evaluate(
                         args.eval_episodes, reward_return * args.reward_scale,
-                        cost_return * args.cost_scale)
+                        cost_return * args.cost_scale, prom=False)
                 average_cost.append(cost)
                 average_reward.append(ret)
 
@@ -214,7 +215,7 @@ def train(args: CDTTrainConfig):
             logger.store(tab="length", **log_len)
 
             # save the current weight
-            logger.save_checkpoint()
+            # logger.save_checkpoint()
             # save the best weight
             mean_ret = np.mean(average_reward)
             mean_cost = np.mean(average_cost)
@@ -223,7 +224,10 @@ def train(args: CDTTrainConfig):
                 best_cost = mean_cost
                 best_reward = mean_ret
                 best_idx = step
-                logger.save_checkpoint(suffix="best")
+                # logger.save_checkpoint(suffix="best")
+                save_path = os.getcwd()+f'/save/{args.task}/{args.exp}/model.pt'
+                torch.save(model.state_dict(), save_path)
+                print(f'best is saved at {save_path}')
 
             logger.store(tab="train", best_idx=best_idx)
             logger.write(step, display=False)

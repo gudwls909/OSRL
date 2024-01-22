@@ -63,10 +63,11 @@ def load_config_and_model(path: str, best: bool = False):
         print(f"load config from {config_file}")
         with open(config_file) as f:
             config = yaml.load(f.read(), Loader=yaml.FullLoader)
-        model_file = "model.pt"
-        if best:
-            model_file = "model_best.pt"
-        model_path = osp.join(path, "checkpoint/" + model_file)
+        # model_file = "model.pt"
+        # if best:
+        #     model_file = "model_best.pt"
+        # model_path = osp.join(path, "checkpoint/" + model_file)
+        model_path = f'{path}'+f'/model.pt'
         print(f"load model from {model_path}")
         model = torch.load(model_path)
         return config, model

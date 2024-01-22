@@ -4,6 +4,7 @@ from typing import Any, DefaultDict, Dict, List, Optional, Tuple
 
 @dataclass
 class CDTTrainConfig:
+    exp: str = "tmp"
     # wandb params
     project: str = "OSRL-baselines"
     group: str = None
@@ -30,14 +31,14 @@ class CDTTrainConfig:
     embedding_dropout: float = 0.1
     time_emb: bool = True
     # training params
-    task: str = "OfflineCarCircle-v0"
+    task: str = "OfflinePointGoal1Gymnasium-v0"
     dataset: str = None
     learning_rate: float = 1e-4
     betas: Tuple[float, float] = (0.9, 0.999)
     weight_decay: float = 1e-4
     clip_grad: Optional[float] = 0.25
     batch_size: int = 2048
-    update_steps: int = 100_000
+    update_steps: int = 100000
     lr_warmup_steps: int = 500
     reward_scale: float = 0.1
     cost_scale: float = 1
@@ -46,11 +47,11 @@ class CDTTrainConfig:
     target_returns: Tuple[Tuple[float, ...],
                           ...] = ((450.0, 10), (500.0, 20), (550.0, 50))  # reward, cost
     cost_limit: int = 10
-    eval_episodes: int = 10
-    eval_every: int = 2500
+    eval_episodes: int = 5
+    eval_every: int = 10000
     # general params
     seed: int = 0
-    device: str = "cuda:2"
+    device: str = "cuda:0"
     threads: int = 6
     # augmentation param
     deg: int = 4
@@ -73,7 +74,7 @@ class CDTTrainConfig:
     mul_cost_feat: bool = False
     cat_cost_feat: bool = False
     loss_cost_weight: float = 0.02
-    loss_state_weight: float = 0
+    loss_state_weight: float = 0.004
     cost_reverse: bool = False
     # pf only mode param
     pf_only: bool = False
@@ -116,7 +117,7 @@ class CDTAntRunConfig(CDTTrainConfig):
     deg: int = 3
     max_reward: float = 1000.0
     max_rew_decrease: float = 150
-    device: str = "cuda:2"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -133,7 +134,7 @@ class CDTDroneRunConfig(CDTTrainConfig):
     max_reward: float = 700.0
     max_rew_decrease: float = 100
     min_reward: float = 1
-    device: str = "cuda:3"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -150,7 +151,7 @@ class CDTDroneCircleConfig(CDTTrainConfig):
     max_reward: float = 1000.0
     max_rew_decrease: float = 100
     min_reward: float = 1
-    device: str = "cuda:3"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -167,7 +168,7 @@ class CDTCarRunConfig(CDTTrainConfig):
     max_reward: float = 600.0
     max_rew_decrease: float = 100
     min_reward: float = 1
-    device: str = "cuda:3"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -184,7 +185,7 @@ class CDTAntCircleConfig(CDTTrainConfig):
     max_reward: float = 500.0
     max_rew_decrease: float = 100
     min_reward: float = 1
-    device: str = "cuda:2"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -201,7 +202,7 @@ class CDTBallRunConfig(CDTTrainConfig):
     max_reward: float = 1400.0
     max_rew_decrease: float = 200
     min_reward: float = 1
-    device: str = "cuda:2"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -218,7 +219,7 @@ class CDTBallCircleConfig(CDTTrainConfig):
     max_reward: float = 1000.0
     max_rew_decrease: float = 200
     min_reward: float = 1
-    device: str = "cuda:1"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -298,7 +299,7 @@ class CDTCarGoal1Config(CDTTrainConfig):
     max_reward: float = 50.0
     max_rew_decrease: float = 5
     min_reward: float = 1
-    device: str = "cuda:1"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -314,7 +315,7 @@ class CDTCarGoal2Config(CDTTrainConfig):
     max_reward: float = 35.0
     max_rew_decrease: float = 5
     min_reward: float = 1
-    device: str = "cuda:1"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -330,7 +331,7 @@ class CDTCarPush1Config(CDTTrainConfig):
     max_reward: float = 20.0
     max_rew_decrease: float = 5
     min_reward: float = 1
-    device: str = "cuda:1"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -346,7 +347,7 @@ class CDTCarPush2Config(CDTTrainConfig):
     max_reward: float = 15.0
     max_rew_decrease: float = 3
     min_reward: float = 1
-    device: str = "cuda:1"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -362,7 +363,7 @@ class CDTPointButton1Config(CDTTrainConfig):
     max_reward: float = 45.0
     max_rew_decrease: float = 5
     min_reward: float = 1
-    device: str = "cuda:2"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -378,7 +379,7 @@ class CDTPointButton2Config(CDTTrainConfig):
     max_reward: float = 50.0
     max_rew_decrease: float = 10
     min_reward: float = 1
-    device: str = "cuda:2"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -394,7 +395,7 @@ class CDTPointCircle1Config(CDTTrainConfig):
     max_reward: float = 65.0
     max_rew_decrease: float = 5
     min_reward: float = 1
-    device: str = "cuda:2"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -410,7 +411,7 @@ class CDTPointCircle2Config(CDTTrainConfig):
     max_reward: float = 55.0
     max_rew_decrease: float = 5
     min_reward: float = 1
-    device: str = "cuda:2"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -426,7 +427,7 @@ class CDTPointGoal1Config(CDTTrainConfig):
     max_reward: float = 35.0
     max_rew_decrease: float = 5
     min_reward: float = 1
-    device: str = "cuda:3"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -442,7 +443,7 @@ class CDTPointGoal2Config(CDTTrainConfig):
     max_reward: float = 35.0
     max_rew_decrease: float = 5
     min_reward: float = 1
-    device: str = "cuda:3"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -458,7 +459,7 @@ class CDTPointPush1Config(CDTTrainConfig):
     max_reward: float = 20.0
     max_rew_decrease: float = 5
     min_reward: float = 1
-    device: str = "cuda:3"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -474,7 +475,7 @@ class CDTPointPush2Config(CDTTrainConfig):
     max_reward: float = 15.0
     max_rew_decrease: float = 3
     min_reward: float = 1
-    device: str = "cuda:3"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -491,7 +492,7 @@ class CDTAntVelocityConfig(CDTTrainConfig):
     max_reward: float = 3000.0
     max_rew_decrease: float = 500
     min_reward: float = 1
-    device: str = "cuda:1"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -508,7 +509,7 @@ class CDTHalfCheetahVelocityConfig(CDTTrainConfig):
     max_reward: float = 3000.0
     max_rew_decrease: float = 500
     min_reward: float = 1
-    device: str = "cuda:2"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -525,7 +526,7 @@ class CDTHopperVelocityConfig(CDTTrainConfig):
     max_reward: float = 2000.0
     max_rew_decrease: float = 300
     min_reward: float = 1
-    device: str = "cuda:2"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -542,7 +543,7 @@ class CDTSwimmerVelocityConfig(CDTTrainConfig):
     max_reward: float = 250.0
     max_rew_decrease: float = 50
     min_reward: float = 1
-    device: str = "cuda:2"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -559,7 +560,7 @@ class CDTWalker2dVelocityConfig(CDTTrainConfig):
     max_reward: float = 3600.0
     max_rew_decrease: float = 800
     min_reward: float = 1
-    device: str = "cuda:2"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -577,7 +578,7 @@ class CDTEasySparseConfig(CDTTrainConfig):
     max_reward: float = 500.0
     max_rew_decrease: float = 100
     min_reward: float = 1
-    device: str = "cuda:3"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -595,7 +596,7 @@ class CDTEasyMeanConfig(CDTTrainConfig):
     max_reward: float = 500.0
     max_rew_decrease: float = 100
     min_reward: float = 1
-    device: str = "cuda:3"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -613,7 +614,7 @@ class CDTEasyDenseConfig(CDTTrainConfig):
     max_reward: float = 500.0
     max_rew_decrease: float = 100
     min_reward: float = 1
-    device: str = "cuda:2"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -631,7 +632,7 @@ class CDTMediumSparseConfig(CDTTrainConfig):
     max_reward: float = 300.0
     max_rew_decrease: float = 100
     min_reward: float = 1
-    device: str = "cuda:3"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -649,7 +650,7 @@ class CDTMediumMeanConfig(CDTTrainConfig):
     max_reward: float = 300.0
     max_rew_decrease: float = 100
     min_reward: float = 1
-    device: str = "cuda:2"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -675,7 +676,7 @@ class CDTHardSparseConfig(CDTTrainConfig):
     max_reward: float = 500.0
     max_rew_decrease: float = 100
     min_reward: float = 1
-    device: str = "cuda:2"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -693,7 +694,7 @@ class CDTHardMeanConfig(CDTTrainConfig):
     max_reward: float = 500.0
     max_rew_decrease: float = 100
     min_reward: float = 1
-    device: str = "cuda:2"
+    device: str = "cuda:0"
 
 
 @dataclass
@@ -711,7 +712,7 @@ class CDTHardDenseConfig(CDTTrainConfig):
     max_reward: float = 500.0
     max_rew_decrease: float = 100
     min_reward: float = 1
-    device: str = "cuda:2"
+    device: str = "cuda:0"
 
 
 CDT_DEFAULT_CONFIG = {
