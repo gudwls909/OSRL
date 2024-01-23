@@ -895,7 +895,7 @@ class CDTTrainer:
             action_a0 = torch.zeros((1, act_dim), device=device, dtype=torch.float32)
             # rewards = torch.zeros(0, device=device, dtype=torch.float32)
             return_0 = torch.as_tensor(target_return).reshape(1, 1).to(device=device, dtype=torch.float32)
-            cost_0 = epi_cost.reshape(1, 1)
+            cost_0 = epi_cost.reshape(1, 1).to(device=device, dtype=torch.float32)
 
             # ep_return = target_return
             # target_return = torch.tensor(ep_return, device=device, dtype=torch.float32).reshape(1, 1)

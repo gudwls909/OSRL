@@ -12,7 +12,7 @@ import pyrallis
 import torch
 from dsrl.infos import DENSITY_CFG
 from dsrl.offline_env import OfflineEnvWrapper, wrap_env  # noqa
-from fsrl.utils import WandbLogger
+from fsrl.utils import WandbLogger, DummyLogger
 from torch.utils.data import DataLoader
 from tqdm.auto import trange  # noqa
 
@@ -40,7 +40,7 @@ def train(args: CDTTrainConfig):
     if args.logdir is not None:
         # args.logdir = os.path.join(args.logdir, args.group, args.name)
         args.logdir = os.getcwd()+f'/save/{args.task}/{args.exp}'
-    logger = WandbLogger(cfg, args.project, args.group, args.name, args.logdir)
+    # logger = WandbLogger(cfg, args.project, args.group, args.name, args.logdir)
     # logger = TensorboardLogger(args.logdir, log_txt=True, name=args.name)
     # logger.save_config(cfg, verbose=args.verbose)
 
@@ -114,12 +114,12 @@ def train(args: CDTTrainConfig):
     def checkpoint_fn():
         return {"model_state": model.state_dict()}
 
-    logger.setup_checkpoint_fn(checkpoint_fn)
+    # logger.setup_checkpoint_fn(checkpoint_fn)
 
     # trainer
     trainer = CDTTrainer(model,
                          env,
-                         logger=logger,
+                         logger=DummyLogger(),
                          learning_rate=args.learning_rate,
                          weight_decay=args.weight_decay,
                          betas=args.betas,
@@ -168,7 +168,7 @@ def train(args: CDTTrainConfig):
     
     env.set_target_cost(dataset.costs_mean)
     cfg["task"] = dataset.costs_mean
-    logger.save_config(cfg, verbose=args.verbose)
+    # logger.save_config(cfg, verbose=args.verbose)
 
     trainloader = DataLoader(
         dataset,
@@ -214,9 +214,9 @@ def train(args: CDTTrainConfig):
                 log_reward.update({name: ret})
                 log_len.update({name: length})
 
-            logger.store(tab="cost", **log_cost)
-            logger.store(tab="ret", **log_reward)
-            logger.store(tab="length", **log_len)
+            # logger.store(tab="cost", **log_cost)
+            # logger.store(tab="ret", **log_reward)
+            # logger.store(tab="length", **log_len)
 
             # save the current weight
             # logger.save_checkpoint()
@@ -233,11 +233,11 @@ def train(args: CDTTrainConfig):
                 torch.save(model.state_dict(), save_path)
                 print(f'best is saved at {save_path}')
 
-            logger.store(tab="train", best_idx=best_idx)
-            logger.write(step, display=False)
+            # logger.store(tab="train", best_idx=best_idx)
+            # logger.write(step, display=False)
 
-        else:
-            logger.write_without_reset(step)
+        # else:
+        #     logger.write_without_reset(step)
 
 
 if __name__ == "__main__":

@@ -11,28 +11,38 @@ from pyrallis import field
 
 from osrl.algorithms import CDT, CDTTrainer
 from osrl.common.exp_util import load_config_and_model, seed_all
+from examples.configs.cdt_configs import CDT_DEFAULT_CONFIG, CDTTrainConfig
+import types
 
 
-@dataclass
-class EvalConfig:
-    # path: str = "log/.../checkpoint/model.pt"
-    task: str = 'none'
-    exp: str = 'tmp'
-    returns: List[float] = field(default=[30, 30, 30], is_mutable=True)
-    costs: List[float] = field(default=[20, 40, 80], is_mutable=True)
-    noise_scale: List[float] = None
-    eval_episodes: int = 10
-    best: bool = False
-    device: str = "cpu"
-    threads: int = 4
+# @dataclass
+# class EvalConfig:
+#     # path: str = "log/.../checkpoint/model.pt"
+#     task: str = 'none'
+#     exp: str = 'tmp'
+#     returns: List[float] = field(default=[30, 30, 30], is_mutable=True)
+#     costs: List[float] = field(default=[20, 40, 80], is_mutable=True)
+#     noise_scale: List[float] = None
+#     eval_episodes: int = 10
+#     best: bool = False
+#     device: str = "cpu"
+#     threads: int = 4
 
 
 @pyrallis.wrap()
-def eval(args: EvalConfig):
+def eval(args: CDTTrainConfig):
+
+    # update config
+    cfg, old_cfg = asdict(args), asdict(CDTTrainConfig())
+    differing_values = {key: cfg[key] for key in cfg.keys() if cfg[key] != old_cfg[key]}
+    cfg = asdict(CDT_DEFAULT_CONFIG[args.task]())
+    cfg.update(differing_values)
+    args = types.SimpleNamespace(**cfg)
 
     load_path = os.getcwd()+f'/save/{args.task}/{args.exp}'
-    cfg, _ = load_config_and_model(load_path, args.best)
+    # cfg, _ = load_config_and_model(load_path, args.best)
     seed_all(cfg["seed"])
+    args.device = "cpu"
     if args.device == "cpu":
         torch.set_num_threads(args.threads)
 
@@ -88,11 +98,16 @@ def eval(args: EvalConfig):
                          cost_reverse=cfg["cost_reverse"],
                          device=args.device)
 
-    rets = args.returns
-    costs = args.costs
-    assert len(rets) == len(
-        costs
-    ), f"The length of returns {len(rets)} should be equal to costs {len(costs)}!"
+    # rets = args.returns
+    # costs = args.costs
+    # assert len(rets) == len(
+    #     costs
+    # ), f"The length of returns {len(rets)} should be equal to costs {len(costs)}!"
+    rets, costs = [], []
+    for target_return in args.target_returns:
+        reward_return, cost_return = target_return
+        rets.append(reward_return)
+        costs.append(cost_return)
     for target_ret, target_cost in zip(rets, costs):
         seed_all(cfg["seed"])
         ret, cost, length = trainer.evaluate(args.eval_episodes,
@@ -107,7 +122,7 @@ def eval(args: EvalConfig):
         normalized_ret_prom, normalized_cost_prom = env.get_normalized_score(ret_prom, cost_prom)
         print(
             f"Target reward {target_ret}, real reward {ret}, normalized reward: {normalized_ret}; target cost {target_cost}, real cost {cost}, normalized cost: {normalized_cost}\n" 
-            f"real reward prom {ret_prom}, normlalized_reward porm {normalized_ret_prom}, real cost prom {cost_prom}, normalized cost prom {normalized_cost_prom}"
+            f"                       real reward prom {ret_prom}, normlalized_reward porm {normalized_ret_prom}, real cost prom {cost_prom}, normalized cost prom {normalized_cost_prom}"
         )
 
 
