@@ -167,7 +167,11 @@ def train(args: CDTTrainConfig):
     )
     
     env.set_target_cost(dataset.costs_mean)
-    cfg["task"] = dataset.costs_mean
+    cost_save_path = os.getcwd()+f'/save/{args.task}/{args.exp}'
+    import pickle
+    data = {'cost_mean': dataset.costs_mean}
+    with open(cost_save_path+'/cost_mean.pickle', 'wb') as f:
+        pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
     # logger.save_config(cfg, verbose=args.verbose)
 
     trainloader = DataLoader(

@@ -41,6 +41,10 @@ def eval(args: CDTTrainConfig):
 
     load_path = os.getcwd()+f'/save/{args.task}/{args.exp}'
     # cfg, _ = load_config_and_model(load_path, args.best)
+    import pickle
+    with open(load_path+'/cost_mean.pickle', 'rb') as f:
+        data = pickle.load(f)
+    costs_mean = data['cost_mean']
     seed_all(cfg["seed"])
     args.device = "cpu"
     if args.device == "cpu":
@@ -56,7 +60,8 @@ def eval(args: CDTTrainConfig):
         reward_scale=cfg["reward_scale"],
     )
     env = OfflineEnvWrapper(env)
-    env.set_target_cost(cfg["cost_limit"])
+    # env.set_target_cost(cfg["cost_limit"])
+    env.set_target_cost(costs_mean)
 
     target_entropy = -env.action_space.shape[0]
 
