@@ -5,6 +5,7 @@
 **.txt
 run.sh
 log/
+**.pickle
 
 
 */.DS_Store
