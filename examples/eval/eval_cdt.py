@@ -126,8 +126,8 @@ def eval(args: CDTTrainConfig):
         normalized_ret, normalized_cost = env.get_normalized_score(ret, cost)
         normalized_ret_prom, normalized_cost_prom = env.get_normalized_score(ret_prom, cost_prom)
         print(
-            f"Target reward {target_ret}, real reward {ret}, normalized reward: {normalized_ret}; target cost {target_cost}, real cost {cost}, normalized cost: {normalized_cost}\n" 
-            f"                       real reward prom {ret_prom}, normlalized_reward porm {normalized_ret_prom}, real cost prom {cost_prom}, normalized cost prom {normalized_cost_prom}"
+            f"Target reward {target_ret}, real reward {ret:.3f}, normalized reward: {normalized_ret:.3f}; target cost {target_cost:.3f}, real cost {cost:.3f}, normalized cost: {normalized_cost:.3f}\n" 
+            f"                   real reward prom {ret_prom:.3f}, normlalized_reward porm {normalized_ret_prom:.3f}, real cost prom {cost_prom:.3f}, normalized cost prom {normalized_cost_prom:.3f}"
         )
 
 
