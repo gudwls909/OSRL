@@ -1,10 +1,11 @@
-
+**.sh
 **.pt
 **.yaml
 **.png
 **.txt
 run.sh
 log/
+**.pickle
 
 
 */.DS_Store
