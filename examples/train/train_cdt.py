@@ -43,6 +43,9 @@ def train(args: CDTTrainConfig):
     # logger = WandbLogger(cfg, args.project, args.group, args.name, args.logdir)
     # logger = TensorboardLogger(args.logdir, log_txt=True, name=args.name)
     # logger.save_config(cfg, verbose=args.verbose)
+    save_path_dir = os.getcwd()+f'/save/{args.task}/{args.exp}'
+    if not os.path.exists(save_path_dir):
+        os.makedirs(save_path_dir)
 
     # set seed
     seed_all(args.seed)
