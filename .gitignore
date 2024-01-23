@@ -3,6 +3,8 @@
 **.yaml
 **.png
 **.txt
+run.sh
+log/
 
 
 */.DS_Store

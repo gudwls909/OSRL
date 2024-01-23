@@ -18,10 +18,10 @@ class EvalConfig:
     # path: str = "log/.../checkpoint/model.pt"
     task: str = 'none'
     exp: str = 'tmp'
-    returns: List[float] = field(default=[300, 400, 500], is_mutable=True)
-    costs: List[float] = field(default=[10, 10, 10], is_mutable=True)
+    returns: List[float] = field(default=[30, 30, 30], is_mutable=True)
+    costs: List[float] = field(default=[20, 40, 80], is_mutable=True)
     noise_scale: List[float] = None
-    eval_episodes: int = 5
+    eval_episodes: int = 10
     best: bool = False
     device: str = "cpu"
     threads: int = 4

@@ -702,6 +702,11 @@ class SequenceDataset(IterableDataset):
         self.seq_len = seq_len
         self.start_sampling = start_sampling
 
+        costs = []
+        for path in self.original_data:
+            costs.append(path['costs'].sum())
+        self.costs_mean = round(np.mean(costs), 2)
+
         self.aug_data = []
         if pf_only:
             print("*" * 100)

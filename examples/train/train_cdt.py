@@ -42,7 +42,7 @@ def train(args: CDTTrainConfig):
         args.logdir = os.getcwd()+f'/save/{args.task}/{args.exp}'
     logger = WandbLogger(cfg, args.project, args.group, args.name, args.logdir)
     # logger = TensorboardLogger(args.logdir, log_txt=True, name=args.name)
-    logger.save_config(cfg, verbose=args.verbose)
+    # logger.save_config(cfg, verbose=args.verbose)
 
     # set seed
     seed_all(args.seed)
@@ -56,7 +56,7 @@ def train(args: CDTTrainConfig):
 
     # pre-process offline dataset
     data = env.get_dataset()
-    env.set_target_cost(args.cost_limit)
+    # env.set_target_cost(args.cost_limit)
 
     cbins, rbins, max_npb, min_npb = None, None, None, None
     if args.density != 1.0:
@@ -165,6 +165,10 @@ def train(args: CDTTrainConfig):
         rstd=args.rstd,
         cstd=args.cstd,
     )
+    
+    env.set_target_cost(dataset.costs_mean)
+    cfg["task"] = dataset.costs_mean
+    logger.save_config(cfg, verbose=args.verbose)
 
     trainloader = DataLoader(
         dataset,
