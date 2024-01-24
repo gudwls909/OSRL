@@ -118,19 +118,20 @@ def eval(args: CDTTrainConfig):
     rets_norm, costs_norm = [], []
     rets_prom, costs_prom = [], []
     rets_prom_norm, costs_prom_norm = [], []
-    for target_ret, target_cost in zip(target_rets, target_costs):
-        ret, cost, length = trainer.evaluate(args.eval_episodes,
-                                             target_ret * cfg["reward_scale"],
-                                             target_cost * cfg["cost_scale"],
-                                             prom=False)
-        ret_prom, cost_prom, length_prom = trainer.evaluate(args.eval_episodes,
-                                             target_ret * cfg["reward_scale"],
-                                             target_cost * cfg["cost_scale"],
-                                             prom=True)
-        normalized_ret, normalized_cost = env.get_normalized_score(ret, cost)
-        normalized_ret_prom, normalized_cost_prom = env.get_normalized_score(ret_prom, cost_prom)
-        rets.append(ret); costs.append(cost), rets_norm.append(normalized_ret); costs_norm.append(normalized_cost)
-        rets_prom.append(ret_prom); costs_prom.append(cost_prom), rets_prom_norm.append(normalized_ret_prom); costs_prom_norm.append(normalized_cost_prom)
+    with torch.no_grad():
+        for target_ret, target_cost in zip(target_rets, target_costs):
+            ret, cost, length = trainer.evaluate(args.eval_episodes,
+                                                target_ret * cfg["reward_scale"],
+                                                target_cost * cfg["cost_scale"],
+                                                prom=False)
+            ret_prom, cost_prom, length_prom = trainer.evaluate(args.eval_episodes,
+                                                target_ret * cfg["reward_scale"],
+                                                target_cost * cfg["cost_scale"],
+                                                prom=True)
+            normalized_ret, normalized_cost = env.get_normalized_score(ret, cost)
+            normalized_ret_prom, normalized_cost_prom = env.get_normalized_score(ret_prom, cost_prom)
+            rets.append(ret); costs.append(cost), rets_norm.append(normalized_ret); costs_norm.append(normalized_cost)
+            rets_prom.append(ret_prom); costs_prom.append(cost_prom), rets_prom_norm.append(normalized_ret_prom); costs_prom_norm.append(normalized_cost_prom)
     ret = sum(rets)/len(rets); cost = sum(costs)/len(costs); normalized_ret = sum(rets_norm)/len(rets_norm); normalized_cost = sum(costs_norm)/len(costs_norm)
     ret_prom = sum(rets_prom)/len(rets_prom); cost_prom = sum(costs_prom)/len(costs_prom); normalized_ret_prom = sum(rets_prom_norm)/len(rets_prom_norm); normalized_cost_prom = sum(costs_prom_norm)/len(costs_prom_norm)
     print(

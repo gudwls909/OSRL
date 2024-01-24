@@ -196,24 +196,25 @@ def train(args: CDTTrainConfig):
         if (step + 1) % args.eval_every == 0 or step == args.update_steps - 1:
             average_reward, average_cost = [], []
             log_cost, log_reward, log_len = {}, {}, {}
-            for target_return in args.target_returns:
-                reward_return, cost_return = target_return
-                if args.cost_reverse:
-                    # critical step, rescale the return!
-                    ret, cost, length = trainer.evaluate(
-                        args.eval_episodes, reward_return * args.reward_scale,
-                        (args.episode_len - cost_return) * args.cost_scale, prom=False)
-                else:
-                    ret, cost, length = trainer.evaluate(
-                        args.eval_episodes, reward_return * args.reward_scale,
-                        cost_return * args.cost_scale, prom=False)
-                average_cost.append(cost)
-                average_reward.append(ret)
+            with torch.no_grad():
+                for target_return in args.target_returns:
+                    reward_return, cost_return = target_return
+                    if args.cost_reverse:
+                        # critical step, rescale the return!
+                        ret, cost, length = trainer.evaluate(
+                            args.eval_episodes, reward_return * args.reward_scale,
+                            (args.episode_len - cost_return) * args.cost_scale, prom=False)
+                    else:
+                        ret, cost, length = trainer.evaluate(
+                            args.eval_episodes, reward_return * args.reward_scale,
+                            cost_return * args.cost_scale, prom=False)
+                    average_cost.append(cost)
+                    average_reward.append(ret)
 
-                name = "c_" + str(int(cost_return)) + "_r_" + str(int(reward_return))
-                log_cost.update({name: cost})
-                log_reward.update({name: ret})
-                log_len.update({name: length})
+                    name = "c_" + str(int(cost_return)) + "_r_" + str(int(reward_return))
+                    log_cost.update({name: cost})
+                    log_reward.update({name: ret})
+                    log_len.update({name: length})
 
             # logger.store(tab="cost", **log_cost)
             # logger.store(tab="ret", **log_reward)
