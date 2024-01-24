@@ -134,7 +134,7 @@ def eval(args: CDTTrainConfig):
     ret = sum(rets)/len(rets); cost = sum(costs)/len(costs); normalized_ret = sum(rets_norm)/len(rets_norm); normalized_cost = sum(costs_norm)/len(costs_norm)
     ret_prom = sum(rets_prom)/len(rets_prom); cost_prom = sum(costs_prom)/len(costs_prom); normalized_ret_prom = sum(rets_prom_norm)/len(rets_prom_norm); normalized_cost_prom = sum(costs_prom_norm)/len(costs_prom_norm)
     print(
-        f"Target reward {target_ret}, real reward      {ret:.3f}, normalized reward:      {normalized_ret:.3f},real cost {cost:.1f},      normalized cost: {normalized_cost:.3f}\n" 
+        f"Target reward {target_ret}, real reward      {ret:.3f}, normalized reward:      {normalized_ret:.3f},      real cost {cost:.1f}, normalized cost: {normalized_cost:.3f}\n" 
         f"Target cost   {target_cost:.1f}, real reward prom {ret_prom:.3f}, normlalized_reward porm {normalized_ret_prom:.3f}, real cost prom {cost_prom:.1f}, normalized cost prom {normalized_cost_prom:.3f}"
     )
 
