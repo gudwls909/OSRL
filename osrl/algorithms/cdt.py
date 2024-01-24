@@ -26,8 +26,6 @@ import tempfile
 import os
 import pickle
 from ray.train import Checkpoint
-# ray_tune_logger = logging.getLogger("ray.tune")
-# ray_tune_logger.setLevel(logging.ERROR)
 
 ray_data_logger = logging.getLogger("ray.data")
 ray_tune_logger = logging.getLogger("ray.tune")
@@ -272,7 +270,7 @@ class GenerationMixin:
         
         # unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
         om_arr = []
-        model_kwargs['max_k'] = 3
+        # model_kwargs['max_k'] = 3
         while True:
             model_inputs = self.prepare_inputs_for_genearation(input_ids, **model_kwargs)
             # del a
@@ -656,7 +654,7 @@ class CDT(nn.Module, GenerationMixin):
                 
         gamma = 0.99
         # gamma_vector = torch.pow(gamma, torch.flip(torch.arange(max_k), dims=(0,))).cuda()
-        gamma_vector = torch.pow(gamma, torch.flip(torch.arange(window_length - max_k, window_length), dims=(0,)))
+        gamma_vector = torch.pow(gamma, torch.flip(torch.arange(window_length - max_k, window_length), dims=(0,))).to(device=states.device)
         occupancy_measure = torch.tensordot(torch.exp(log_p_pi), gamma_vector, dims=([0], [0]))
         
         return states_pred[0], actions_pred[0], rtgs_pred[0].unsqueeze(-1), costs_pred[0].unsqueeze(-1).unsqueeze(-1), occupancy_measure
@@ -936,7 +934,16 @@ class CDTTrainer:
                                             num_samples=n_of_shots,
                                             max_k=5)
 
-            # prom_output = self.model.generate(input_ids1, generation_config=conf)
+            # prom_output =[]
+
+            # for _ in range(n_of_shots):
+            #     input_ids1 = dict()
+            #     input_ids1.update(states=states_s0_3.detach())
+            #     input_ids1.update(actions=actions_a0_3.detach())
+            #     input_ids1.update(returns_to_go=rtg0_3.detach())
+            #     input_ids1.update(costs_to_go=cost0_3.detach())
+            #     output = model.generate(input_ids1, generation_config=conf, max_k=3)
+            #     prom_output.append(output)
 
             states_prom = [prom_out['states'][:,:-1,:][0] for prom_out in prom_output]
             actions_prom = [prom_out['actions'][:,:-1,:][0] for prom_out in prom_output]
@@ -945,38 +952,38 @@ class CDTTrainer:
             min_om = torch.cat([torch.min(prom_out['occupancy_measure'], dim=1)[0] for prom_out in prom_output])
             argmin_om = torch.cat([torch.min(prom_out['occupancy_measure'], dim=1)[1] for prom_out in prom_output]).tolist()
 
-            # for i in range(n_of_shots):
-            #     if argmin_om[i] + 1 < len_of_prom:
-            #         zero_pad_s = torch.zeros((len_of_prom - argmin_om[i] - 1, states.shape[1]), 
-            #                                     device=device, dtype=torch.float32)
-            #         zero_pad_a = torch.zeros((len_of_prom - argmin_om[i] - 1, actions.shape[1]), 
-            #                                     device=device, dtype=torch.float32)
-            #         zero_pad_r = torch.zeros((len_of_prom - argmin_om[i] - 1, 1), 
-            #                                     device=device, dtype=torch.float32)
-            #         group_state_prom[i] = torch.cat([zero_pad_s, states_prom[i][:argmin_om[i] + 1, :]], dim=0)
-            #         group_act_prom[i] = torch.cat([zero_pad_a, actions_prom[i][:argmin_om[i] + 1, :]], dim=0)
-            #         group_rtg_prom[i] = torch.cat([zero_pad_r, rtg_prom[i][:argmin_om[i] + 1, :]])
-            #     else:
-            #         group_state_prom[i] = states_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
-            #         group_act_prom[i] = actions_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
-            #         group_rtg_prom[i] = rtg_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
-
             for i in range(n_of_shots):
                 if argmin_om[i] + 1 < len_of_prom:
-                    group_state_prom[i] = states_prom[i][:argmin_om[i] + 1, :]
-                    group_act_prom[i] = actions_prom[i][:argmin_om[i] + 1, :]
-                    group_rtg_prom[i] = rtg_prom[i][:argmin_om[i] + 1, :]
-                    group_cost_prom[i] = costs_prom[i][:argmin_om[i] + 1, :]
-                elif argmin_om[i] + 1 > states_prom[i].shape[0]:
-                    group_state_prom[i] = states_prom[i][argmin_om[i] - len_of_prom + 1:, :]
-                    group_act_prom[i] = actions_prom[i][argmin_om[i] - len_of_prom + 1:, :]
-                    group_rtg_prom[i] = rtg_prom[i][argmin_om[i] - len_of_prom + 1:, :]
-                    group_cost_prom[i] = costs_prom[i][argmin_om[i] - len_of_prom + 1:, :]
+                    zero_pad_s = torch.zeros((len_of_prom - argmin_om[i] - 1, state_dim), 
+                                                device=device, dtype=torch.float32)
+                    zero_pad_a = torch.zeros((len_of_prom - argmin_om[i] - 1, act_dim), 
+                                                device=device, dtype=torch.float32)
+                    zero_pad_r = torch.zeros((len_of_prom - argmin_om[i] - 1, 1), 
+                                                device=device, dtype=torch.float32)
+                    group_state_prom[i] = torch.cat([zero_pad_s, states_prom[i][:argmin_om[i] + 1, :]], dim=0)
+                    group_act_prom[i] = torch.cat([zero_pad_a, actions_prom[i][:argmin_om[i] + 1, :]], dim=0)
+                    group_rtg_prom[i] = torch.cat([zero_pad_r, rtg_prom[i][:argmin_om[i] + 1, :]])
                 else:
                     group_state_prom[i] = states_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
                     group_act_prom[i] = actions_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
                     group_rtg_prom[i] = rtg_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
-                    group_cost_prom[i] = costs_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
+
+            # for i in range(n_of_shots):
+            #     if argmin_om[i] + 1 < len_of_prom:
+            #         group_state_prom[i] = states_prom[i][:argmin_om[i] + 1, :]
+            #         group_act_prom[i] = actions_prom[i][:argmin_om[i] + 1, :]
+            #         group_rtg_prom[i] = rtg_prom[i][:argmin_om[i] + 1, :]
+            #         group_cost_prom[i] = costs_prom[i][:argmin_om[i] + 1, :]
+            #     elif argmin_om[i] + 1 > states_prom[i].shape[0]:
+            #         group_state_prom[i] = states_prom[i][argmin_om[i] - len_of_prom + 1:, :]
+            #         group_act_prom[i] = actions_prom[i][argmin_om[i] - len_of_prom + 1:, :]
+            #         group_rtg_prom[i] = rtg_prom[i][argmin_om[i] - len_of_prom + 1:, :]
+            #         group_cost_prom[i] = costs_prom[i][argmin_om[i] - len_of_prom + 1:, :]
+            #     else:
+            #         group_state_prom[i] = states_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
+            #         group_act_prom[i] = actions_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
+            #         group_rtg_prom[i] = rtg_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
+            #         group_cost_prom[i] = costs_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
 
             
             best_n = torch.argmax(min_om, dim=0).item()        
