@@ -1273,20 +1273,20 @@ class CDTTrainer:
             input_ids1.update(costs_to_go=costs)
 
             conf = {"output_mode": GenerationMode.GREEDY_SEARCH_WITH_OM_TRUE_CLF}
-            prom_output = generate_parallel2(model, input_ids1,
-                                            generation_config=conf,
-                                            num_samples=n_of_shots,
-                                            max_k=5)
+            # prom_output = generate_parallel2(model, input_ids1,
+            #                                 generation_config=conf,
+            #                                 num_samples=n_of_shots,
+            #                                 max_k=5)
             
-            # prom_output =[]
-            # for _ in range(n_of_shots):
-            #     input_ids1 = dict()
-            #     input_ids1.update(states=states.detach())
-            #     input_ids1.update(actions=actions.detach())
-            #     input_ids1.update(returns_to_go=returns.detach())
-            #     input_ids1.update(costs_to_go=costs)
-            #     output = model.generate(input_ids1, generation_config=conf, max_k=3)
-            #     prom_output.append(output)
+            prom_output =[]
+            for _ in range(n_of_shots):
+                input_ids1 = dict()
+                input_ids1.update(states=states.detach())
+                input_ids1.update(actions=actions.detach())
+                input_ids1.update(returns_to_go=returns.detach())
+                input_ids1.update(costs_to_go=costs)
+                output = model.generate(input_ids1, generation_config=conf, max_k=3)
+                prom_output.append(output)
 
             states_prom = [prom_out['states'][:,:-1,:][0] for prom_out in prom_output]
             actions_prom = [prom_out['actions'][:,:-1,:][0] for prom_out in prom_output]
