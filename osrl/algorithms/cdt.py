@@ -347,7 +347,7 @@ class GenerationMixin:
         previous_om = torch.tensor([float('inf')], device='cuda')
         satisfy_condition = torch.zeros(0, device='cuda')
         while True:
-            model_inputs, attention_mask = self.prepare_inputs_for_genearation(input_ids, **model_kwargs)
+            model_inputs = self.prepare_inputs_for_genearation(input_ids, **model_kwargs)
             # del a
             # states, actions, rewards, returns_to_go, timesteps,
         
@@ -359,9 +359,7 @@ class GenerationMixin:
             # )
             # print(model_inputs['states'][:,-20:])
             outputs = self.forward_with_om_no_padding(**model_inputs, 
-                                deterministic=True, 
-                                max_k=model_kwargs['max_k'],
-                                attention_masks=attention_mask)
+                                max_k=model_kwargs['max_k'],)
             # outputs = self.forward(**model_inputs, deterministic=False, attention_mask=attention_mask)
             out_dicts = {'states': outputs[0].detach(),
                          'actions': outputs[1].detach(),
@@ -1252,12 +1250,12 @@ class CDTTrainer:
             best_cost_prom = group_cost_prom[best_n]
 
             # states = torch.from_numpy(obs).reshape(1, state_dim).to(device=device, dtype=torch.float32)
-            states = torch.cat([best_state_prom.reshape(1, len_of_prom, state_dim), states], dim=1)
+            states_prom1 = torch.cat([best_state_prom.reshape(1, len_of_prom, state_dim), states], dim=1)
             # actions = torch.zeros((0, act_dim), device=device, dtype=torch.float32)
-            actions = torch.cat([best_act_prom.reshape(1, len_of_prom, act_dim), actions], dim=1)
+            actions_prom1 = torch.cat([best_act_prom.reshape(1, len_of_prom, act_dim), actions], dim=1)
             # rewards = torch.zeros(0, device=device, dtype=torch.float32)
-            returns = torch.cat([best_rtg_prom.reshape(1, len_of_prom), returns], dim=1)
-            costs = torch.cat([best_cost_prom.reshape(1, len_of_prom), costs], dim=1)
+            returns_prom1 = torch.cat([best_rtg_prom.reshape(1, len_of_prom), returns], dim=1)
+            costs_prom1 = torch.cat([best_cost_prom.reshape(1, len_of_prom), costs], dim=1)
 
 
             # 2nd prom start
@@ -1266,13 +1264,17 @@ class CDTTrainer:
             group_rtg_prom = torch.zeros((n_of_shots, len_of_prom, 1), device=device, dtype=torch.float32)
             group_cost_prom = torch.zeros((n_of_shots, len_of_prom, 1), device=device, dtype=torch.float32)
 
-            input_ids1 = dict()
-            input_ids1.update(states=states)
-            input_ids1.update(actions=actions)
-            input_ids1.update(returns_to_go=returns)
-            input_ids1.update(costs_to_go=costs)
+            returns_prom1_3 = returns_prom1.unsqueeze(2)
+            costs_prom1_3 = costs_prom1.unsqueeze(2)
 
             conf = {"output_mode": GenerationMode.GREEDY_SEARCH_WITH_OM_TRUE_CLF}
+
+            # input_ids1 = dict()
+            # input_ids1.update(states=states_prom1)
+            # input_ids1.update(actions=actions_prom1)
+            # input_ids1.update(returns_to_go=returns_prom1_3)
+            # input_ids1.update(costs_to_go=costs_prom1_3)
+
             # prom_output = generate_parallel2(model, input_ids1,
             #                                 generation_config=conf,
             #                                 num_samples=n_of_shots,
@@ -1281,10 +1283,11 @@ class CDTTrainer:
             prom_output =[]
             for _ in range(n_of_shots):
                 input_ids1 = dict()
-                input_ids1.update(states=states.detach())
-                input_ids1.update(actions=actions.detach())
-                input_ids1.update(returns_to_go=returns.detach())
-                input_ids1.update(costs_to_go=costs)
+                input_ids1.update(states=states_prom1.detach())
+                input_ids1.update(actions=actions_prom1.detach())
+                input_ids1.update(returns_to_go=returns_prom1_3.detach())
+                input_ids1.update(costs_to_go=costs_prom1_3.detach())
+                
                 output = model.generate(input_ids1, generation_config=conf, max_k=3)
                 prom_output.append(output)
 
@@ -1323,12 +1326,12 @@ class CDTTrainer:
             best_cost_prom = group_cost_prom[best_n]
 
             # states = torch.from_numpy(obs).reshape(1, state_dim).to(device=device, dtype=torch.float32)
-            states = torch.cat([best_state_prom.reshape(1, len_of_prom, state_dim), states_s0_3], dim=1)
+            states = torch.cat([best_state_prom.reshape(1, len_of_prom, state_dim), states], dim=1)
             # actions = torch.zeros((0, act_dim), device=device, dtype=torch.float32)
-            actions = torch.cat([best_act_prom.reshape(1, len_of_prom, act_dim), actions_a0_3], dim=1)
+            actions = torch.cat([best_act_prom.reshape(1, len_of_prom, act_dim), actions], dim=1)
             # rewards = torch.zeros(0, device=device, dtype=torch.float32)
-            returns = torch.cat([best_rtg_prom.reshape(1, len_of_prom), return_0], dim=1)
-            costs = torch.cat([best_cost_prom.reshape(1, len_of_prom), cost_0], dim=1)
+            returns = torch.cat([best_rtg_prom.reshape(1, len_of_prom), returns], dim=1)
+            costs = torch.cat([best_cost_prom.reshape(1, len_of_prom), costs], dim=1)
 
 
         # cannot step higher than model episode len, as timestep embeddings will crash
@@ -1338,7 +1341,7 @@ class CDTTrainer:
             # step + 1 as : operator is not inclusive, last action is dummy with zeros
             # (as model will predict last, actual last values are not important) # fix this noqa!!!
             if prom:
-                step = step + len_of_prom
+                step = step + len_of_prom - 1
             s = states[:, :step + 1][:, -model.seq_len:]  # noqa
             a = actions[:, :step + 1][:, -model.seq_len:]  # noqa
             r = returns[:, :step + 1][:, -model.seq_len:]  # noqa
