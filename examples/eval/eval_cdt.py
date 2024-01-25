@@ -46,7 +46,7 @@ def eval(args: CDTTrainConfig):
         data = pickle.load(f)
     costs_mean = data['cost_mean']
     seed_all(cfg["seed"])
-    args.device = "cpu"
+    # args.device = "cpu"
     if args.device == "cpu":
         torch.set_num_threads(args.threads)
 
@@ -108,13 +108,17 @@ def eval(args: CDTTrainConfig):
     # assert len(rets) == len(
     #     costs
     # ), f"The length of returns {len(rets)} should be equal to costs {len(costs)}!"
-    rets, costs = [], []
+    target_rets, target_costs = [], []
     for target_return in args.target_returns:
         reward_return, cost_return = target_return
-        rets.append(reward_return)
-        costs.append(cost_return)
-    for target_ret, target_cost in zip(rets, costs):
-        seed_all(cfg["seed"])
+        target_rets.append(reward_return)
+        target_costs.append(cost_return)
+        
+    rets, costs = [], []
+    rets_norm, costs_norm = [], []
+    rets_prom, costs_prom = [], []
+    rets_prom_norm, costs_prom_norm = [], []
+    for target_ret, target_cost in zip(target_rets, target_costs):
         ret, cost, length = trainer.evaluate(args.eval_episodes,
                                              target_ret * cfg["reward_scale"],
                                              target_cost * cfg["cost_scale"],
@@ -125,10 +129,14 @@ def eval(args: CDTTrainConfig):
                                              prom=True)
         normalized_ret, normalized_cost = env.get_normalized_score(ret, cost)
         normalized_ret_prom, normalized_cost_prom = env.get_normalized_score(ret_prom, cost_prom)
-        print(
-            f"Target reward {target_ret}, real reward {ret:.3f}, normalized reward: {normalized_ret:.3f}; target cost {target_cost:.3f}, real cost {cost:.3f}, normalized cost: {normalized_cost:.3f}\n" 
-            f"                   real reward prom {ret_prom:.3f}, normlalized_reward porm {normalized_ret_prom:.3f}, real cost prom {cost_prom:.3f}, normalized cost prom {normalized_cost_prom:.3f}"
-        )
+        rets.append(ret); costs.append(cost), rets_norm.append(normalized_ret); costs_norm.append(normalized_cost)
+        rets_prom.append(ret_prom); costs_prom.append(cost_prom), rets_prom_norm.append(normalized_ret_prom); costs_prom_norm.append(normalized_cost_prom)
+    ret = sum(rets)/len(rets); cost = sum(costs)/len(costs); normalized_ret = sum(rets_norm)/len(rets_norm); normalized_cost = sum(costs_norm)/len(costs_norm)
+    ret_prom = sum(rets_prom)/len(rets_prom); cost_prom = sum(costs_prom)/len(costs_prom); normalized_ret_prom = sum(rets_prom_norm)/len(rets_prom_norm); normalized_cost_prom = sum(costs_prom_norm)/len(costs_prom_norm)
+    print(
+        f"Target reward {target_ret}, real reward      {ret:.3f}, normalized reward:      {normalized_ret:.3f},      real cost {cost:.1f}, normalized cost: {normalized_cost:.3f}\n" 
+        f"Target cost   {target_cost:.1f}, real reward prom {ret_prom:.3f}, normlalized_reward porm {normalized_ret_prom:.3f}, real cost prom {cost_prom:.1f}, normalized cost prom {normalized_cost_prom:.3f}"
+    )
 
 
 if __name__ == "__main__":
