@@ -119,6 +119,7 @@ class GenerationMode(ExplicitEnum):
     GREEDY_SEARCH = "greedy_search"
     GREEDY_SEARCH_WITH_OM = "greedy_search_with_om"
     GREEDY_SEARCH_WITH_OM_NO_PADDING = "greedy_search_with_om_no_padding"
+    GREEDY_SEARCH_WITH_OM_TRUE_CLF = "greedy_search_with_true_clf"
     SAMPLE = "sample"
     ASSISTED_GENERATION = "assisted_generation"
     # Beam methods
@@ -260,6 +261,11 @@ class GenerationMixin:
                 stopping_criteria=prepared_stopping_criteria,
                 **model_kwargs,
             )
+        elif generation_mode == GenerationMode.GREEDY_SEARCH_WITH_OM_TRUE_CLF:
+            return self.greedy_search_for_clf(input_ids,
+                stopping_criteria=prepared_stopping_criteria,
+                **model_kwargs,
+            )
         else:
             raise ValueError
         
@@ -329,6 +335,74 @@ class GenerationMixin:
 
         return input_ids
         
+
+    @torch.no_grad()    
+    def greedy_search_for_clf(self,
+                input_ids,
+                    stopping_criteria,
+                    **model_kwargs):
+        
+        # unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
+        om_arr = []
+        previous_om = torch.tensor([float('inf')], device='cuda')
+        satisfy_condition = torch.zeros(0, device='cuda')
+        while True:
+            model_inputs, attention_mask = self.prepare_inputs_for_genearation(input_ids, **model_kwargs)
+            # del a
+            # states, actions, rewards, returns_to_go, timesteps,
+        
+
+            # forward pass to get next token
+            # outputs = self(
+            #     **model_inputs,
+            #     attention_mask=attention_mask
+            # )
+            # print(model_inputs['states'][:,-20:])
+            outputs = self.forward_with_om_no_padding(**model_inputs, 
+                                deterministic=True, 
+                                max_k=model_kwargs['max_k'],
+                                attention_masks=attention_mask)
+            # outputs = self.forward(**model_inputs, deterministic=False, attention_mask=attention_mask)
+            out_dicts = {'states': outputs[0].detach(),
+                         'actions': outputs[1].detach(),
+                         'returns_to_go': outputs[2].detach(),
+                         'costs_to_go': outputs[3].detach()} #, 'log_p_pi': outputs[3]}
+            om = outputs[4].detach()
+            om_arr.append(om)
+            satisfy_condition = torch.cat((satisfy_condition, torch.le(om, previous_om)), 0)
+            previous_om = om
+
+            # del model_inputs, outputs
+            # outputs: state_preds, action_preds, return_preds
+
+            # next_token_logits = outputs.logits[:, -1, :]
+            # next_tokens_scores = logits_processor(input_ids, next_token_logits)
+
+            # store scores, atttenstions and hidden states when required?
+            
+            # argmax
+            # next_tokens = torch.argmax(next_tokens_scores, dim=-1)
+
+            # update generated ids, model inputs, and length for next step
+            # print(out_dicts['states'].size(), input_ids['states'].size())
+
+            # output_ids = {k: torch.cat([v, torch.unsqueeze(v[:,-1,...], 1)], dim=1) for k, v in out_dicts.items()}
+            input_ids.update({k: torch.cat([v, torch.unsqueeze(out_dicts[k][:,-1,...], 1)], dim=1) for k, v in input_ids.items()})
+
+            # model_kwargs = self._update_kwargs_for_generation(
+            #     outputs, model_kwargs
+            # )
+
+            # stop if we exceed the max length
+            if stopping_criteria(input_ids):
+                this_peer_finished = True
+                break
+            torch.cuda.empty_cache()
+        input_ids.update(occupancy_measure=torch.cat(om_arr, dim=0).unsqueeze(0))
+        input_ids.update(satisfy_condition=torch.sum(satisfy_condition))
+
+
+        return input_ids
 
 
 
@@ -655,8 +729,8 @@ class CDT(nn.Module, GenerationMixin):
                 
         gamma = 0.99
         # gamma_vector = torch.pow(gamma, torch.flip(torch.arange(max_k), dims=(0,))).cuda()
-        gamma_vector = torch.pow(gamma, torch.flip(torch.arange(window_length - max_k, window_length), dims=(0,))).to(states.device)
-        occupancy_measure = torch.tensordot(torch.exp(log_p_pi), gamma_vector, dims=([0], [0]))
+        gamma_vector = torch.pow(gamma, torch.flip(torch.arange(window_length - max_k, window_length), dims=(0,))).to(device=states.device)
+        occupancy_measure = torch.tensordot(torch.exp(log_p_pis), gamma_vector, dims=([0], [0]))
         
         return states_pred[0], actions_pred[0], rtgs_pred[0].unsqueeze(-1), costs_pred[0].unsqueeze(-1).unsqueeze(-1), occupancy_measure
 
@@ -825,9 +899,9 @@ class CDTTrainer:
         self.model.eval()
         episode_rets, episode_costs, episode_lens = [], [], []
         for _ in trange(num_rollouts, desc="Evaluating...", leave=False):
-            epi_ret, epi_len, epi_cost = self.rollout(prom, self.model, self.env,
-                                                      target_return, target_cost,
-                                                      )
+            epi_ret, epi_len, epi_cost = self.rollout2(prom, self.model, self.env,
+                                                    target_return, target_cost,
+                                                    )
             episode_rets.append(epi_ret); episode_lens.append(epi_len); episode_costs.append(epi_cost)
         self.model.train()
         return np.mean(episode_rets) / self.reward_scale, np.mean(episode_costs
@@ -961,30 +1035,17 @@ class CDTTrainer:
                                                 device=device, dtype=torch.float32)
                     zero_pad_r = torch.zeros((len_of_prom - argmin_om[i] - 1, 1), 
                                                 device=device, dtype=torch.float32)
+                    zero_pad_c = torch.zeros((len_of_prom - argmin_om[i] - 1, 1), 
+                                                device=device, dtype=torch.float32)
                     group_state_prom[i] = torch.cat([zero_pad_s, states_prom[i][:argmin_om[i] + 1, :]], dim=0)
                     group_act_prom[i] = torch.cat([zero_pad_a, actions_prom[i][:argmin_om[i] + 1, :]], dim=0)
                     group_rtg_prom[i] = torch.cat([zero_pad_r, rtg_prom[i][:argmin_om[i] + 1, :]])
+                    group_cost_prom[i] = torch.cat([zero_pad_c,costs_prom[i][:argmin_om[i] + 1, :]])
                 else:
                     group_state_prom[i] = states_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
                     group_act_prom[i] = actions_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
                     group_rtg_prom[i] = rtg_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
-
-            # for i in range(n_of_shots):
-            #     if argmin_om[i] + 1 < len_of_prom:
-            #         group_state_prom[i] = states_prom[i][:argmin_om[i] + 1, :]
-            #         group_act_prom[i] = actions_prom[i][:argmin_om[i] + 1, :]
-            #         group_rtg_prom[i] = rtg_prom[i][:argmin_om[i] + 1, :]
-            #         group_cost_prom[i] = costs_prom[i][:argmin_om[i] + 1, :]
-            #     elif argmin_om[i] + 1 > states_prom[i].shape[0]:
-            #         group_state_prom[i] = states_prom[i][argmin_om[i] - len_of_prom + 1:, :]
-            #         group_act_prom[i] = actions_prom[i][argmin_om[i] - len_of_prom + 1:, :]
-            #         group_rtg_prom[i] = rtg_prom[i][argmin_om[i] - len_of_prom + 1:, :]
-            #         group_cost_prom[i] = costs_prom[i][argmin_om[i] - len_of_prom + 1:, :]
-            #     else:
-            #         group_state_prom[i] = states_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
-            #         group_act_prom[i] = actions_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
-            #         group_rtg_prom[i] = rtg_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
-            #         group_cost_prom[i] = costs_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
+                    group_cost_prom[i] = costs_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
 
             
             best_n = torch.argmax(min_om, dim=0).item()        
@@ -1000,6 +1061,274 @@ class CDTTrainer:
             # rewards = torch.zeros(0, device=device, dtype=torch.float32)
             returns = torch.cat([best_rtg_prom.reshape(1, len_of_prom), returns], dim=1)
             costs = torch.cat([best_cost_prom.reshape(1, len_of_prom), costs], dim=1)
+
+
+        # cannot step higher than model episode len, as timestep embeddings will crash
+        episode_ret, episode_cost, episode_len = 0.0, 0.0, 0
+        for step in range(model.episode_len):
+            # first select history up to step, then select last seq_len states,
+            # step + 1 as : operator is not inclusive, last action is dummy with zeros
+            # (as model will predict last, actual last values are not important) # fix this noqa!!!
+            if prom:
+                step = step + len_of_prom
+            s = states[:, :step + 1][:, -model.seq_len:]  # noqa
+            a = actions[:, :step + 1][:, -model.seq_len:]  # noqa
+            r = returns[:, :step + 1][:, -model.seq_len:]  # noqa
+            c = costs[:, :step + 1][:, -model.seq_len:]  # noqa
+            t = time_steps[:, :step + 1][:, -model.seq_len:]  # noqa
+
+            acts, _, _, _, _, _ = model(s, a, r, c, t, None, epi_cost)
+            # if self.stochastic:
+            #     acts = torch.mean(acts, dim=1)
+            acts = torch.clamp(acts, -self.max_action, self.max_action)
+            act = acts.reshape(-1, act_dim).cpu().numpy()[-1]
+            # act = acts[0, -1].cpu().numpy()
+            # act = self.get_ensemble_action(1, model, s, a, r, c, t, epi_cost)
+
+            obs_next, reward, terminated, truncated, info = env.step(act)
+            if self.cost_reverse:
+                cost = (1.0 - info["cost"]) * self.cost_scale
+            else:
+                cost = info["cost"] * self.cost_scale
+            # at step t, we predict a_t, get s_{t + 1}, r_{t + 1}
+            actions[:, step] = torch.as_tensor(act)
+            states[:, step + 1] = torch.as_tensor(obs_next)
+            returns[:, step + 1] = torch.as_tensor(returns[:, step] - reward)
+            costs[:, step + 1] = torch.as_tensor(costs[:, step] - cost)
+
+            obs = obs_next
+
+            episode_ret += reward
+            episode_len += 1
+            episode_cost += info["cost"]
+
+            if terminated or truncated:
+                break
+
+        return episode_ret, episode_len, episode_cost
+    
+
+    # for prom2
+    def rollout2(
+        self,
+        prom,
+        model: CDT,
+        env: gym.Env,
+        target_return: float,
+        target_cost: float,
+    ) -> Tuple[float, float]:
+        """
+        Evaluates the performance of the model on a single episode.
+        """
+        states = torch.zeros(1,
+                             model.episode_len + 1,
+                             model.state_dim,
+                             dtype=torch.float,
+                             device=self.device)
+        actions = torch.zeros(1,
+                              model.episode_len,
+                              model.action_dim,
+                              dtype=torch.float,
+                              device=self.device)
+        returns = torch.zeros(1,
+                              model.episode_len + 1,
+                              dtype=torch.float,
+                              device=self.device)
+        costs = torch.zeros(1,
+                            model.episode_len + 1,
+                            dtype=torch.float,
+                            device=self.device)
+        time_steps = torch.arange(model.episode_len,
+                                  dtype=torch.long,
+                                  device=self.device)
+        time_steps = time_steps.view(1, -1)
+
+        obs, info = env.reset()
+        states[:, 0] = torch.as_tensor(obs, device=self.device)
+        returns[:, 0] = torch.as_tensor(target_return, device=self.device)
+        costs[:, 0] = torch.as_tensor(target_cost, device=self.device)
+
+        epi_cost = torch.tensor(np.array([target_cost]),
+                                dtype=torch.float,
+                                device=self.device)
+
+        state_dim = model.state_dim
+        act_dim = model.action_dim
+        device = self.device
+        if prom:    
+            n_of_shots = 5
+            len_of_prom = 5
+            group_state_prom = torch.zeros((n_of_shots, len_of_prom, state_dim), device=device, dtype=torch.float32)
+            group_act_prom = torch.zeros((n_of_shots, len_of_prom, act_dim), device=device, dtype=torch.float32)
+            group_rtg_prom = torch.zeros((n_of_shots, len_of_prom, 1), device=device, dtype=torch.float32)
+            group_cost_prom = torch.zeros((n_of_shots, len_of_prom, 1), device=device, dtype=torch.float32)
+
+            # we keep all the histories on the device
+            # note that the latest action and reward will be "padding"
+            state_s0 = torch.from_numpy(obs).reshape(1, state_dim).to(device=device, dtype=torch.float32)
+            action_a0 = torch.zeros((1, act_dim), device=device, dtype=torch.float32)
+            # rewards = torch.zeros(0, device=device, dtype=torch.float32)
+            return_0 = torch.as_tensor(target_return).reshape(1, 1).to(device=device, dtype=torch.float32)
+            cost_0 = epi_cost.reshape(1, 1).to(device=device, dtype=torch.float32)
+
+            # ep_return = target_return
+            # target_return = torch.tensor(ep_return, device=device, dtype=torch.float32).reshape(1, 1)
+            # timesteps = torch.tensor(0, device=device, dtype=torch.long).reshape(1, 1)
+
+
+            # actions = torch.cat([actions[0], torch.zeros((1, act_dim), device=device)], dim=0)
+            # rewards = torch.cat([rewards, torch.zeros(1, device=device)])
+            
+            s = states[:, :1]
+            a = actions[:, :1]
+            r = returns[:, :1]
+            c = costs[:, :1]
+            t = time_steps[:, :1]
+
+            act, _, _, _, _, _ = model(s, a, r, c, t, None, epi_cost)
+            action_a0[0] = act
+
+            # states_norm = (states - state_mean) / state_std
+
+            states_s0_3 = torch.unsqueeze(state_s0, 1)
+            actions_a0_3 = torch.unsqueeze(action_a0, 1)
+            rtg0_3 = torch.unsqueeze(return_0, 1)
+            cost0_3 = torch.unsqueeze(cost_0, 1)
+
+            input_ids1 = dict()
+            input_ids1.update(states=states_s0_3)
+            input_ids1.update(actions=actions_a0_3)
+            input_ids1.update(returns_to_go=rtg0_3)
+            input_ids1.update(costs_to_go=cost0_3)
+            
+            conf = {"output_mode": GenerationMode.GREEDY_SEARCH_WITH_OM_NO_PADDING}
+            # prom_output = generate_parallel2(model, input_ids1,
+            #                                 generation_config=conf,
+            #                                 num_samples=n_of_shots,
+            #                                 max_k=5)
+
+            prom_output =[]
+
+            for _ in range(n_of_shots):
+                input_ids1 = dict()
+                input_ids1.update(states=states_s0_3.detach())
+                input_ids1.update(actions=actions_a0_3.detach())
+                input_ids1.update(returns_to_go=rtg0_3.detach())
+                input_ids1.update(costs_to_go=cost0_3.detach())
+                output = model.generate(input_ids1, generation_config=conf, max_k=3)
+                prom_output.append(output)
+
+            states_prom = [prom_out['states'][:,:-1,:][0] for prom_out in prom_output]
+            actions_prom = [prom_out['actions'][:,:-1,:][0] for prom_out in prom_output]
+            rtg_prom = [prom_out['returns_to_go'][:,:-1,:][0] for prom_out in prom_output]
+            costs_prom = [prom_out['costs_to_go'][:,:-1,:][0] for prom_out in prom_output]
+            min_om = torch.cat([torch.min(prom_out['occupancy_measure'], dim=1)[0] for prom_out in prom_output])
+            argmin_om = torch.cat([torch.min(prom_out['occupancy_measure'], dim=1)[1] for prom_out in prom_output]).tolist()
+
+            for i in range(n_of_shots):
+                if argmin_om[i] + 1 < len_of_prom:
+                    zero_pad_s = torch.zeros((len_of_prom - argmin_om[i] - 1, state_dim), 
+                                                device=device, dtype=torch.float32)
+                    zero_pad_a = torch.zeros((len_of_prom - argmin_om[i] - 1, act_dim), 
+                                                device=device, dtype=torch.float32)
+                    zero_pad_r = torch.zeros((len_of_prom - argmin_om[i] - 1, 1), 
+                                                device=device, dtype=torch.float32)
+                    zero_pad_c = torch.zeros((len_of_prom - argmin_om[i] - 1, 1), 
+                                                device=device, dtype=torch.float32)
+                    group_state_prom[i] = torch.cat([zero_pad_s, states_prom[i][:argmin_om[i] + 1, :]], dim=0)
+                    group_act_prom[i] = torch.cat([zero_pad_a, actions_prom[i][:argmin_om[i] + 1, :]], dim=0)
+                    group_rtg_prom[i] = torch.cat([zero_pad_r, rtg_prom[i][:argmin_om[i] + 1, :]])
+                    group_cost_prom[i] = torch.cat([zero_pad_c,costs_prom[i][:argmin_om[i] + 1, :]])
+                else:
+                    group_state_prom[i] = states_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
+                    group_act_prom[i] = actions_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
+                    group_rtg_prom[i] = rtg_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
+                    group_cost_prom[i] = costs_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
+            
+            best_n = torch.argmax(min_om, dim=0).item()        
+            best_state_prom = group_state_prom[best_n]
+            best_act_prom = group_act_prom[best_n]
+            best_rtg_prom = group_rtg_prom[best_n]
+            best_cost_prom = group_cost_prom[best_n]
+
+            # states = torch.from_numpy(obs).reshape(1, state_dim).to(device=device, dtype=torch.float32)
+            states = torch.cat([best_state_prom.reshape(1, len_of_prom, state_dim), states], dim=1)
+            # actions = torch.zeros((0, act_dim), device=device, dtype=torch.float32)
+            actions = torch.cat([best_act_prom.reshape(1, len_of_prom, act_dim), actions], dim=1)
+            # rewards = torch.zeros(0, device=device, dtype=torch.float32)
+            returns = torch.cat([best_rtg_prom.reshape(1, len_of_prom), returns], dim=1)
+            costs = torch.cat([best_cost_prom.reshape(1, len_of_prom), costs], dim=1)
+
+
+            # 2nd prom start
+            group_state_prom = torch.zeros((n_of_shots, len_of_prom, state_dim), device=device, dtype=torch.float32)
+            group_act_prom = torch.zeros((n_of_shots, len_of_prom, act_dim), device=device, dtype=torch.float32)
+            group_rtg_prom = torch.zeros((n_of_shots, len_of_prom, 1), device=device, dtype=torch.float32)
+            group_cost_prom = torch.zeros((n_of_shots, len_of_prom, 1), device=device, dtype=torch.float32)
+
+            input_ids1 = dict()
+            input_ids1.update(states=states)
+            input_ids1.update(actions=actions)
+            input_ids1.update(returns_to_go=returns)
+            input_ids1.update(costs_to_go=costs)
+
+            conf = {"output_mode": GenerationMode.GREEDY_SEARCH_WITH_OM_TRUE_CLF}
+            prom_output = generate_parallel2(model, input_ids1,
+                                            generation_config=conf,
+                                            num_samples=n_of_shots,
+                                            max_k=5)
+            
+            # prom_output =[]
+            # for _ in range(n_of_shots):
+            #     input_ids1 = dict()
+            #     input_ids1.update(states=states.detach())
+            #     input_ids1.update(actions=actions.detach())
+            #     input_ids1.update(returns_to_go=returns.detach())
+            #     input_ids1.update(costs_to_go=costs)
+            #     output = model.generate(input_ids1, generation_config=conf, max_k=3)
+            #     prom_output.append(output)
+
+            states_prom = [prom_out['states'][:,:-1,:][0] for prom_out in prom_output]
+            actions_prom = [prom_out['actions'][:,:-1,:][0] for prom_out in prom_output]
+            rtg_prom = [prom_out['returns_to_go'][:,:-1,:][0] for prom_out in prom_output]
+            costs_prom = [prom_out['costs_to_go'][:,:-1,:][0] for prom_out in prom_output]
+            min_om = torch.cat([torch.min(prom_out['occupancy_measure'], dim=1)[0] for prom_out in prom_output])
+            argmin_om = torch.cat([torch.min(prom_out['occupancy_measure'], dim=1)[1] for prom_out in prom_output]).tolist()
+            optimum_cond = torch.cat([prom_out['satisfy_condition'].view(1) for prom_out in prom_output])
+
+            for i in range(n_of_shots):
+                if argmin_om[i] + 1 < len_of_prom:
+                    zero_pad_s = torch.zeros((len_of_prom - argmin_om[i] - 1, state_dim), 
+                                                device=device, dtype=torch.float32)
+                    zero_pad_a = torch.zeros((len_of_prom - argmin_om[i] - 1, act_dim), 
+                                                device=device, dtype=torch.float32)
+                    zero_pad_r = torch.zeros((len_of_prom - argmin_om[i] - 1, 1), 
+                                                device=device, dtype=torch.float32)
+                    zero_pad_c = torch.zeros((len_of_prom - argmin_om[i] - 1, 1), 
+                                                device=device, dtype=torch.float32)
+                    group_state_prom[i] = torch.cat([zero_pad_s, states_prom[i][:argmin_om[i] + 1, :]], dim=0)
+                    group_act_prom[i] = torch.cat([zero_pad_a, actions_prom[i][:argmin_om[i] + 1, :]], dim=0)
+                    group_rtg_prom[i] = torch.cat([zero_pad_r, rtg_prom[i][:argmin_om[i] + 1, :]])
+                    group_cost_prom[i] = torch.cat([zero_pad_c,costs_prom[i][:argmin_om[i] + 1, :]])
+                else:
+                    group_state_prom[i] = states_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
+                    group_act_prom[i] = actions_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
+                    group_rtg_prom[i] = rtg_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
+                    group_cost_prom[i] = costs_prom[i][argmin_om[i] - len_of_prom + 1: argmin_om[i] + 1, :]
+            
+            best_n = torch.argmax(optimum_cond, dim=0).item()        
+            best_state_prom = group_state_prom[best_n]
+            best_act_prom = group_act_prom[best_n]
+            best_rtg_prom = group_rtg_prom[best_n]
+            best_cost_prom = group_cost_prom[best_n]
+
+            # states = torch.from_numpy(obs).reshape(1, state_dim).to(device=device, dtype=torch.float32)
+            states = torch.cat([best_state_prom.reshape(1, len_of_prom, state_dim), states_s0_3], dim=1)
+            # actions = torch.zeros((0, act_dim), device=device, dtype=torch.float32)
+            actions = torch.cat([best_act_prom.reshape(1, len_of_prom, act_dim), actions_a0_3], dim=1)
+            # rewards = torch.zeros(0, device=device, dtype=torch.float32)
+            returns = torch.cat([best_rtg_prom.reshape(1, len_of_prom), return_0], dim=1)
+            costs = torch.cat([best_cost_prom.reshape(1, len_of_prom), cost_0], dim=1)
 
 
         # cannot step higher than model episode len, as timestep embeddings will crash
