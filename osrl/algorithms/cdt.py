@@ -1167,7 +1167,7 @@ class CDTTrainer:
             action_a0 = torch.zeros((1, act_dim), device=device, dtype=torch.float32)
             # rewards = torch.zeros(0, device=device, dtype=torch.float32)
             return_0 = torch.as_tensor(target_return).reshape(1, 1).to(device=device, dtype=torch.float32)
-            cost_0 = epi_cost.reshape(1, 1).to(device=device, dtype=torch.float32)
+            cost_0 = torch.as_tensor(target_cost).reshape(1, 1).to(device=device, dtype=torch.float32)
 
             # ep_return = target_return
             # target_return = torch.tensor(ep_return, device=device, dtype=torch.float32).reshape(1, 1)
@@ -1185,6 +1185,7 @@ class CDTTrainer:
 
             act, _, _, _, _, _ = model(s, a, r, c, t, None, epi_cost)
             action_a0[0] = act
+            actions[0] = act
 
             # states_norm = (states - state_mean) / state_std
 
@@ -1193,20 +1194,21 @@ class CDTTrainer:
             rtg0_3 = torch.unsqueeze(return_0, 1)
             cost0_3 = torch.unsqueeze(cost_0, 1)
 
-            input_ids1 = dict()
-            input_ids1.update(states=states_s0_3)
-            input_ids1.update(actions=actions_a0_3)
-            input_ids1.update(returns_to_go=rtg0_3)
-            input_ids1.update(costs_to_go=cost0_3)
-            
             conf = {"output_mode": GenerationMode.GREEDY_SEARCH_WITH_OM_NO_PADDING}
+
+            # USE RAY
+            # input_ids1 = dict()
+            # input_ids1.update(states=states_s0_3)
+            # input_ids1.update(actions=actions_a0_3)
+            # input_ids1.update(returns_to_go=rtg0_3)
+            # input_ids1.update(costs_to_go=cost0_3)            
             # prom_output = generate_parallel2(model, input_ids1,
             #                                 generation_config=conf,
             #                                 num_samples=n_of_shots,
             #                                 max_k=5)
 
+            # NO USE RAY
             prom_output =[]
-
             for _ in range(n_of_shots):
                 input_ids1 = dict()
                 input_ids1.update(states=states_s0_3.detach())
@@ -1249,13 +1251,10 @@ class CDTTrainer:
             best_rtg_prom = group_rtg_prom[best_n]
             best_cost_prom = group_cost_prom[best_n]
 
-            # states = torch.from_numpy(obs).reshape(1, state_dim).to(device=device, dtype=torch.float32)
-            states_prom1 = torch.cat([best_state_prom.reshape(1, len_of_prom, state_dim), states], dim=1)
-            # actions = torch.zeros((0, act_dim), device=device, dtype=torch.float32)
-            actions_prom1 = torch.cat([best_act_prom.reshape(1, len_of_prom, act_dim), actions], dim=1)
-            # rewards = torch.zeros(0, device=device, dtype=torch.float32)
-            returns_prom1 = torch.cat([best_rtg_prom.reshape(1, len_of_prom), returns], dim=1)
-            costs_prom1 = torch.cat([best_cost_prom.reshape(1, len_of_prom), costs], dim=1)
+            states_prom1 = torch.cat([best_state_prom.reshape(1, len_of_prom, state_dim), states_s0_3], dim=1)
+            actions_prom1 = torch.cat([best_act_prom.reshape(1, len_of_prom, act_dim), actions_a0_3], dim=1)
+            returns_prom1 = torch.cat([best_rtg_prom.reshape(1, len_of_prom, 1), rtg0_3], dim=1)
+            costs_prom1 = torch.cat([best_cost_prom.reshape(1, len_of_prom, 1), cost0_3], dim=1)
 
 
             # 2nd prom start
@@ -1264,39 +1263,38 @@ class CDTTrainer:
             group_rtg_prom = torch.zeros((n_of_shots, len_of_prom, 1), device=device, dtype=torch.float32)
             group_cost_prom = torch.zeros((n_of_shots, len_of_prom, 1), device=device, dtype=torch.float32)
 
-            returns_prom1_3 = returns_prom1.unsqueeze(2)
-            costs_prom1_3 = costs_prom1.unsqueeze(2)
-
             conf = {"output_mode": GenerationMode.GREEDY_SEARCH_WITH_OM_TRUE_CLF}
 
+            # USE RAY
             # input_ids1 = dict()
             # input_ids1.update(states=states_prom1)
             # input_ids1.update(actions=actions_prom1)
             # input_ids1.update(returns_to_go=returns_prom1_3)
             # input_ids1.update(costs_to_go=costs_prom1_3)
-
             # prom_output = generate_parallel2(model, input_ids1,
             #                                 generation_config=conf,
             #                                 num_samples=n_of_shots,
             #                                 max_k=5)
             
+            # NO USE RAY
             prom_output =[]
             for _ in range(n_of_shots):
                 input_ids1 = dict()
-                input_ids1.update(states=states_prom1.detach())
-                input_ids1.update(actions=actions_prom1.detach())
-                input_ids1.update(returns_to_go=returns_prom1_3.detach())
-                input_ids1.update(costs_to_go=costs_prom1_3.detach())
-                
+                input_ids1.update(states=states_prom1)
+                input_ids1.update(actions=actions_prom1)
+                input_ids1.update(returns_to_go=returns_prom1)
+                input_ids1.update(costs_to_go=costs_prom1)
+
                 output = model.generate(input_ids1, generation_config=conf, max_k=3)
                 prom_output.append(output)
+                
 
-            states_prom = [prom_out['states'][:,:-1,:][0] for prom_out in prom_output]
-            actions_prom = [prom_out['actions'][:,:-1,:][0] for prom_out in prom_output]
-            rtg_prom = [prom_out['returns_to_go'][:,:-1,:][0] for prom_out in prom_output]
-            costs_prom = [prom_out['costs_to_go'][:,:-1,:][0] for prom_out in prom_output]
-            min_om = torch.cat([torch.min(prom_out['occupancy_measure'], dim=1)[0] for prom_out in prom_output])
-            argmin_om = torch.cat([torch.min(prom_out['occupancy_measure'], dim=1)[1] for prom_out in prom_output]).tolist()
+            states_prom = [prom_out['states'][:,len_of_prom:-1,:][0] for prom_out in prom_output]
+            actions_prom = [prom_out['actions'][:,len_of_prom:-1,:][0] for prom_out in prom_output]
+            rtg_prom = [prom_out['returns_to_go'][:,len_of_prom:-1,:][0] for prom_out in prom_output]
+            costs_prom = [prom_out['costs_to_go'][:,len_of_prom:-1,:][0] for prom_out in prom_output]
+            min_om = torch.cat([torch.min(prom_out['occupancy_measure'][:,len_of_prom:], dim=1)[0] for prom_out in prom_output])
+            argmin_om = torch.cat([torch.min(prom_out['occupancy_measure'][:,len_of_prom:], dim=1)[1] for prom_out in prom_output]).tolist()
             optimum_cond = torch.cat([prom_out['satisfy_condition'].view(1) for prom_out in prom_output])
 
             for i in range(n_of_shots):
